@@ -29,6 +29,17 @@ df['threedfin_dbh_cm'] = df['threedfin_dbh'] * 100
 # Convert TLS_dbh from meters to cm
 df['TLS_dbh_cm'] = df['TLS_dbh'] * 100
 
+# IMPORTANT: Filter 3DFIN data based on distance threshold
+# Distance correlates with measurement accuracy - only keep close matches
+print(f"\nOriginal 3DFIN records: {df['threedfin_dbh_cm'].notna().sum()}")
+distance_threshold = 7.5  # cm
+threedfin_filtered = df['distance_to_threedfin_cm'] < distance_threshold
+
+# Apply distance filter to 3DFIN data only
+df.loc[~threedfin_filtered, 'threedfin_dbh_cm'] = np.nan
+print(f"3DFIN records after distance filter (<{distance_threshold} cm): {df['threedfin_dbh_cm'].notna().sum()}")
+print(f"Filtered out {(~threedfin_filtered & df['distance_to_threedfin_cm'].notna()).sum()} trees with distance >= {distance_threshold} cm")
+
 # Create a clean dataset with all four methods
 methods_df = df[['field_D', 'TLS_dbh_cm', 'dbh', 'threedfin_dbh_cm']].copy()
 methods_df.columns = ['Field_D', 'TLS_DBH', 'PC_Tools_DBH', '3DFIN_DBH']
@@ -87,7 +98,13 @@ for idx, (method, color) in enumerate(zip(methods_to_compare, colors), 1):
 
         ax.set_xlabel('Field D (cm)', fontsize=12, fontweight='bold')
         ax.set_ylabel(f'{method.replace("_", " ")} (cm)', fontsize=12, fontweight='bold')
-        ax.set_title(f'{method.replace("_", " ")} vs Field D', fontsize=14, fontweight='bold')
+
+        # Add distance filter note for 3DFIN
+        title = f'{method.replace("_", " ")} vs Field D'
+        if method == '3DFIN_DBH':
+            title += f'\n(distance < {distance_threshold} cm)'
+        ax.set_title(title, fontsize=14, fontweight='bold')
+
         ax.legend(loc='lower right')
         ax.grid(True, alpha=0.3)
 
@@ -111,7 +128,13 @@ for idx, (method, color) in enumerate(zip(methods_to_compare, colors), 4):
 
         ax.set_xlabel('Field D (cm)', fontsize=12, fontweight='bold')
         ax.set_ylabel('Residual (cm)', fontsize=12, fontweight='bold')
-        ax.set_title(f'{method.replace("_", " ")} Residuals', fontsize=14, fontweight='bold')
+
+        # Add distance filter note for 3DFIN
+        title = f'{method.replace("_", " ")} Residuals'
+        if method == '3DFIN_DBH':
+            title += f'\n(distance < {distance_threshold} cm)'
+        ax.set_title(title, fontsize=14, fontweight='bold')
+
         ax.legend()
         ax.grid(True, alpha=0.3)
 
@@ -120,7 +143,11 @@ ax = plt.subplot(3, 3, 7)
 for method, color in zip(['Field_D'] + methods_to_compare, ['black'] + colors):
     valid_values = methods_df[method].dropna()
     if len(valid_values) > 0:
-        ax.hist(valid_values, bins=30, alpha=0.4, label=method.replace('_', ' '),
+        # Add distance filter note for 3DFIN in legend
+        label = method.replace('_', ' ')
+        if method == '3DFIN_DBH':
+            label += f' (dist<{distance_threshold}cm)'
+        ax.hist(valid_values, bins=30, alpha=0.4, label=label,
                 color=color, edgecolor='black', linewidth=1)
 
 ax.set_xlabel('DBH (cm)', fontsize=12, fontweight='bold')
@@ -132,8 +159,14 @@ ax.grid(True, alpha=0.3)
 # 4. Box plot comparison
 ax = plt.subplot(3, 3, 8)
 box_data = [methods_df[col].dropna() for col in methods_df.columns]
-bp = ax.boxplot(box_data, tick_labels=[col.replace('_', '\n') for col in methods_df.columns],
-                patch_artist=True)
+# Add distance filter note for 3DFIN in box plot labels
+box_labels = []
+for col in methods_df.columns:
+    label = col.replace('_', '\n')
+    if col == '3DFIN_DBH':
+        label += f'\n(d<{distance_threshold})'
+    box_labels.append(label)
+bp = ax.boxplot(box_data, tick_labels=box_labels, patch_artist=True)
 
 # Color the boxes
 for patch, color in zip(bp['boxes'], ['black'] + colors):
